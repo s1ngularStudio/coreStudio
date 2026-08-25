@@ -1,0 +1,77 @@
+# === SECURITY: Exclude sensitive files ===
+_utilities/
+_workStuff/
+
+# Personal diary entries and private content
+01-biological/studio_topology/inside/_private/
+
+# Environment variables and secrets
+.env
+.env.local
+*.secret
+*_secret.py
+config.json
+credentials.json
+
+# API tokens and keys
+*token*.txt
+*key*.txt
+oauth*.json
+.cache
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# === Processing ===
+# Keep sketch folders but ignore output
+*.mov
+*.avi
+application.*/
+!03-transmissions/web-assets/**/*.mov
+
+# Video is ignored by default (Processing sketch output) except in web-assets,
+# where MP4s are the actual deliverable (Framer hero/carousel video).
+*.mp4
+!03-transmissions/web-assets/**/*.mp4
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === Logs ===
+*.log
+logs/
+
+# chess_music_sync's raw session captures (track/move logs) -- personal play data,
+# not source. Scoped to this project's own data/ dir, not a blanket "data/" pattern,
+# since other subprojects in this repo may have their own unrelated data/ folders.
+02-digital/explorations/chess_music_sync/data/
+
+# === Temporary files ===
+tmp/
+temp/
+*.tmp
+
+# Runtime IPC files the chat bot writes to control the snowglobe sketch -- not deliverables
+03-transmissions/stream-assets/snowglobe/snow_state.txt
+03-transmissions/stream-assets/snowglobe/polar_bear_state.txt
