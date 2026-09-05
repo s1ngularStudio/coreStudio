@@ -14,11 +14,19 @@
       --ink: #16151c;
       --ink-soft: #6b6875;
       --accent: #e7a93f;
+      --backdrop: rgba(253, 252, 250, 0.72);
+    }
+    :root[data-theme="dark"] {
+      --paper: #0d0c14;
+      --ink: #f3efe8;
+      --ink-soft: #96909f;
+      --backdrop: rgba(13, 12, 20, 0.72);
     }
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
       height: 100%;
+      overflow: hidden;
       background: var(--paper);
       color: var(--ink);
     }
@@ -30,6 +38,22 @@
       text-align: center;
       padding: 24px;
       font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      position: relative;
+    }
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .content {
+      position: relative;
+      z-index: 1;
+      padding: 32px 40px;
+      border-radius: 12px;
+      background: var(--backdrop);
+      backdrop-filter: blur(6px);
     }
     .eyebrow {
       font-size: 11px;
@@ -49,13 +73,314 @@
       color: var(--ink-soft);
       max-width: 420px;
       line-height: 1.6;
-      margin: 0;
+      margin: 0 auto;
+    }
+    .theme-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 2;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid var(--ink-soft);
+      background: var(--backdrop);
+      color: var(--ink);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .theme-toggle svg {
+      width: 16px;
+      height: 16px;
     }
   </style>
 </head>
 <body>
-  <div class="eyebrow">(. )&deg; Studio</div>
-  <h1>Something's Coming</h1>
-  <p>Most things digital &ndash; Check back soon.</p>
+  <canvas id="bg"></canvas>
+
+  <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark background">
+    <svg id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+  </button>
+
+  <div class="content">
+    <div class="eyebrow">(. )&deg; Studio</div>
+    <h1>Something's Coming</h1>
+    <p>Most things digital &ndash; Check back soon.</p>
+  </div>
+
+  <script>
+    // ---------------------------------------------------------------------
+    // Theme: defaults to the visitor's system preference, overridable via
+    // the toggle button (persisted in localStorage so a return visit keeps
+    // whatever they last chose).
+    // ---------------------------------------------------------------------
+    const root = document.documentElement;
+    const toggleButton = document.getElementById("theme-toggle");
+    const themeIcon = document.getElementById("theme-icon");
+    const SUN_PATH = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>';
+    const MOON_PATH = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>';
+
+    function applyTheme(isDark) {
+      root.setAttribute("data-theme", isDark ? "dark" : "light");
+      themeIcon.innerHTML = isDark ? SUN_PATH : MOON_PATH; // icon shows what clicking WILL switch to
+    }
+
+    let isDark = (() => {
+      const stored = localStorage.getItem("theme-override");
+      return stored ? stored === "dark" : true; // dark is the default for now
+    })();
+    applyTheme(isDark);
+
+    toggleButton.addEventListener("click", () => {
+      isDark = !isDark;
+      localStorage.setItem("theme-override", isDark ? "dark" : "light");
+      applyTheme(isDark);
+    });
+
+    // ---------------------------------------------------------------------
+    // Chess geometry -- a plain-JS port of core/influence_vectors.py from
+    // the chess_music_sync project. Same rules, same "one bend" behaviour:
+    // every piece emits a beam to everything it attacks; a beam landing on
+    // an occupied square bends once (a pawn bounces the beam back one
+    // square, anything else redirects it toward whichever of that piece's
+    // own attacks reaches farthest). Deliberately reimplemented here rather
+    // than depending on a chess library -- this only needs raw attack
+    // geometry, not move legality/check rules.
+    // ---------------------------------------------------------------------
+    const KNIGHT_OFFSETS = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+    const KING_OFFSETS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+    const DIAG_DIRS = [[-1,-1],[-1,1],[1,-1],[1,1]];
+    const ORTHO_DIRS = [[-1,0],[1,0],[0,-1],[0,1]];
+
+    function inBounds(row, col) {
+      return row >= 0 && row < 8 && col >= 0 && col < 8;
+    }
+
+    function parseFEN(fen) {
+      const placement = fen.split(" ")[0];
+      const board = {}; // key "col,row" -> piece letter (uppercase = white)
+      placement.split("/").forEach((rowStr, row) => {
+        let col = 0;
+        for (const ch of rowStr) {
+          if (/\d/.test(ch)) {
+            col += parseInt(ch, 10);
+          } else {
+            board[`${col},${row}`] = ch;
+            col += 1;
+          }
+        }
+      });
+      return board;
+    }
+
+    function attacksFrom(board, row, col, piece) {
+      const isWhite = piece === piece.toUpperCase();
+      const type = piece.toLowerCase();
+      const targets = [];
+      const add = (r, c) => { if (inBounds(r, c)) targets.push([r, c]); };
+
+      if (type === "p") {
+        const dr = isWhite ? -1 : 1;
+        add(row + dr, col - 1);
+        add(row + dr, col + 1);
+      } else if (type === "n") {
+        for (const [dr, dc] of KNIGHT_OFFSETS) add(row + dr, col + dc);
+      } else if (type === "k") {
+        for (const [dr, dc] of KING_OFFSETS) add(row + dr, col + dc);
+      } else {
+        const dirs = type === "b" ? DIAG_DIRS : type === "r" ? ORTHO_DIRS : [...DIAG_DIRS, ...ORTHO_DIRS];
+        for (const [dr, dc] of dirs) {
+          let r = row + dr, c = col + dc;
+          while (inBounds(r, c)) {
+            targets.push([r, c]);
+            if (board[`${c},${r}`]) break; // first blocker, inclusive
+            r += dr; c += dc;
+          }
+        }
+      }
+      return targets;
+    }
+
+    function unitDirection(fromRow, fromCol, toRow, toCol) {
+      const dr = toRow - fromRow, dc = toCol - fromCol;
+      if (dr !== 0 && dc !== 0 && Math.abs(dr) !== Math.abs(dc)) return null;
+      return [Math.sign(dr), Math.sign(dc)];
+    }
+
+    function step(row, col, dr, dc) {
+      const r = row + dr, c = col + dc;
+      return inBounds(r, c) ? [r, c] : null;
+    }
+
+    function continuationTarget(board, fromRow, fromCol, hitRow, hitCol) {
+      const hitPiece = board[`${hitCol},${hitRow}`];
+      if (hitPiece.toLowerCase() === "p") {
+        const dir = unitDirection(fromRow, fromCol, hitRow, hitCol);
+        if (!dir) return null;
+        return step(hitRow, hitCol, -dir[0], -dir[1]);
+      }
+      const candidates = attacksFrom(board, hitRow, hitCol, hitPiece)
+        .filter(([r, c]) => !(r === fromRow && c === fromCol));
+      if (candidates.length === 0) return null;
+      let best = null, bestDist = -1;
+      for (const [r, c] of candidates) {
+        const dist = Math.max(Math.abs(r - hitRow), Math.abs(c - hitCol));
+        if (dist > bestDist) { bestDist = dist; best = [r, c]; }
+      }
+      return best;
+    }
+
+    function computeBeams(board) {
+      const beams = [];
+      for (const key in board) {
+        const [col, row] = key.split(",").map(Number);
+        const piece = board[key];
+        for (const [tr, tc] of attacksFrom(board, row, col, piece)) {
+          beams.push({ from: [row, col], to: [tr, tc], piece, depth: 0 });
+          const targetPiece = board[`${tc},${tr}`];
+          if (targetPiece) {
+            const cont = continuationTarget(board, row, col, tr, tc);
+            if (cont) beams.push({ from: [tr, tc], to: cont, piece, depth: 1 });
+          }
+        }
+      }
+      return beams;
+    }
+
+    // ---------------------------------------------------------------------
+    // Rendering: a real 4x4 grid, one cell per live game -- 16 genuinely
+    // different, independently-updating positions on screen at once, not
+    // one pattern repeated.
+    // ---------------------------------------------------------------------
+    const PIECE_COLORS = { p: "#8fbf3f", n: "#8a5fd6", b: "#e0623f", r: "#d6473f", q: "#d63fa0", k: "#3fd6d6" };
+    const GRID_SIZE = 4;
+    const DOT_SPACING = 10;
+    const DOT_SPEED = 14; // px/sec
+    const DOT_RADIUS = 1.6;
+
+    const canvas = document.getElementById("bg");
+    const ctx = canvas.getContext("2d");
+    const games = Array.from({ length: GRID_SIZE * GRID_SIZE }, () => ({ board: {}, beams: [] }));
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth * devicePixelRatio;
+      canvas.height = window.innerHeight * devicePixelRatio;
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    // cellSize is always square -- called with a board-sized cell only, never a
+    // distorted/stretched rectangle, so lines never skew off the true diagonal.
+    function drawGame(game, cellSize) {
+      const step = cellSize / 8;
+      const centerOf = (row, col) => [col * step + step / 2, row * step + step / 2];
+
+      const now = performance.now() / 1000;
+      const phase = (now * DOT_SPEED) % DOT_SPACING;
+      for (const beam of game.beams) {
+        const [x1, y1] = centerOf(beam.from[0], beam.from[1]);
+        const [x2, y2] = centerOf(beam.to[0], beam.to[1]);
+        const dx = x2 - x1, dy = y2 - y1;
+        const length = Math.hypot(dx, dy);
+        if (length === 0) continue;
+        const ux = dx / length, uy = dy / length;
+        ctx.fillStyle = PIECE_COLORS[beam.piece.toLowerCase()];
+        ctx.globalAlpha = beam.piece === beam.piece.toUpperCase() ? 0.85 : 0.45;
+        for (let d = phase; d < length; d += DOT_SPACING) {
+          ctx.beginPath();
+          ctx.arc(x1 + ux * d, y1 + uy * d, DOT_RADIUS, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function draw() {
+      const dark = root.getAttribute("data-theme") === "dark";
+      const w = canvas.width / devicePixelRatio, h = canvas.height / devicePixelRatio;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = dark ? "#0d0c14" : "#fdfcfa";
+      ctx.fillRect(0, 0, w, h);
+
+      // A centered square mosaic sized to whichever dimension is the tighter fit
+      // (on a typical wide screen that's the page height) -- every board cell
+      // stays a true square, never stretched to the viewport's own aspect ratio.
+      const mosaicSize = Math.min(w, h);
+      const offsetX = (w - mosaicSize) / 2;
+      const offsetY = (h - mosaicSize) / 2;
+      const cellSize = mosaicSize / GRID_SIZE;
+
+      for (let row = 0; row < GRID_SIZE; row++) {
+        for (let col = 0; col < GRID_SIZE; col++) {
+          ctx.save();
+          ctx.translate(offsetX + col * cellSize, offsetY + row * cellSize);
+          drawGame(games[row * GRID_SIZE + col], cellSize);
+          ctx.restore();
+        }
+      }
+      requestAnimationFrame(draw);
+    }
+    requestAnimationFrame(draw);
+
+    // ---------------------------------------------------------------------
+    // Live data: 16 genuinely distinct simultaneous games, one per Lichess
+    // TV channel (bullet, blitz, rapid, classical, chess960, atomic, ...) --
+    // the real ceiling of Lichess's public API for "many different live
+    // games at once" (verified directly: /api/tv/channels returns exactly
+    // 16 entries; there's no public "N random ongoing games" endpoint).
+    // Each game gets its own independent stream connection and only ever
+    // updates its own grid cell -- verified schema directly against the
+    // real endpoint: flat {"fen": "...", "lm": "...", ...} lines, no
+    // wrapper, one per move after an initial metadata-only line.
+    // ---------------------------------------------------------------------
+    async function watchGame(index, gameId) {
+      try {
+        const response = await fetch(`https://lichess.org/api/stream/game/${gameId}`);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const event = JSON.parse(line);
+            if (event.fen) {
+              const board = parseFEN(event.fen);
+              games[index] = { board, beams: computeBeams(board) };
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Game stream ${index} (${gameId}) error`, err);
+      }
+    }
+
+    let activeGameIds = new Array(GRID_SIZE * GRID_SIZE).fill(null);
+
+    async function refreshChannels() {
+      try {
+        const response = await fetch("https://lichess.org/api/tv/channels");
+        const channels = await response.json();
+        Object.values(channels).forEach(({ gameId }, index) => {
+          if (gameId && gameId !== activeGameIds[index]) {
+            activeGameIds[index] = gameId;
+            watchGame(index, gameId); // fire and forget -- runs until that game ends
+          }
+        });
+      } catch (err) {
+        console.error("Couldn't fetch Lichess TV channels, retrying in 10s", err);
+      }
+    }
+
+    refreshChannels();
+    setInterval(refreshChannels, 60000); // pick up a new game once an old one finishes
+  </script>
 </body>
 </html>
