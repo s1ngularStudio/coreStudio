@@ -1,0 +1,86 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import SocialIcon from "../components/SocialIcon.astro";
+
+// LinkedIn has no icon here on purpose: it was removed from simple-icons (the source for
+// the others) after a trademark request from LinkedIn, so there's no open-source logo to
+// pull for it. It stays as a plain text row instead of substituting one from elsewhere.
+const links = [
+  { label: "LinkedIn", href: "https://www.linkedin.com/in/rodrigoromariz/", icon: null },
+  { label: "Facebook", href: "https://www.facebook.com/S1NGULAR.studio/", icon: "facebook" },
+  { label: "Instagram", href: "https://www.instagram.com/s1ngular_studio/", icon: "instagram" },
+  { label: "Ko-fi", href: "https://ko-fi.com/s1ngular_studio", icon: "kofi" },
+  { label: "Resume", href: "https://bit.ly/3HCoF6o", icon: null },
+] as const;
+
+const fieldStyle =
+  "width: 100%; padding: 18px 20px; background: var(--paper); border: 1px solid var(--hair); " +
+  "border-radius: 6px; font-family: var(--font-mono); text-transform: uppercase; " +
+  "letter-spacing: 0.08em; font-size: 13px; color: var(--ink);";
+---
+
+<BaseLayout title="(. )° Studio — Contact">
+  <h1 style="font-family: var(--font-display); font-size: 48px; letter-spacing: 0.02em; margin: 0 0 24px;">
+    CONTACT
+  </h1>
+  <p style="font-family: var(--font-body); font-size: 17px; line-height: 1.7; max-width: 560px; margin: 0 0 32px;">
+    Please, shoot me a message. I'm open to freelance jobs and collaborations.
+  </p>
+
+  <form
+    name="contact"
+    method="POST"
+    data-netlify="true"
+    netlify-honeypot="bot-field"
+    action="/contact/success"
+    style="display: flex; flex-direction: column; gap: 20px; max-width: 560px; margin-bottom: 48px;"
+  >
+    <input type="hidden" name="form-name" value="contact" />
+    <p style="display: none;">
+      <label>Don't fill this out: <input name="bot-field" /></label>
+    </p>
+
+    <input type="text" name="name" placeholder="Your name..." required style={fieldStyle} />
+    <input type="email" name="email" placeholder="Your email address..." required style={fieldStyle} />
+    <textarea
+      name="message"
+      placeholder="Your message..."
+      required
+      rows="6"
+      style={`${fieldStyle} resize: vertical;`}
+    ></textarea>
+
+    <button
+      type="submit"
+      style="align-self: flex-start; padding: 16px 32px; background: var(--ink); color: var(--paper); border: none; border-radius: 6px; font-family: var(--font-heading); font-weight: 700; text-transform: uppercase; letter-spacing: 2px; font-size: 14px; cursor: pointer;"
+    >
+      Send &middot;
+    </button>
+  </form>
+
+  <div style="border-top: 1px solid var(--hair); padding-top: 24px; display: flex; flex-direction: column; gap: 14px;">
+    {
+      links.map((link) => (
+        <a
+          href={link.href}
+          class="label social-link"
+          style="font-size: 13px; display: inline-flex; align-items: center; gap: 10px; width: fit-content;"
+          target="_blank"
+          rel="noopener"
+        >
+          {link.icon && <SocialIcon name={link.icon} />}
+          {link.label}
+        </a>
+      ))
+    }
+  </div>
+</BaseLayout>
+
+<style>
+  .social-link {
+    color: var(--ink-soft);
+  }
+  .social-link:hover {
+    color: var(--accent);
+  }
+</style>

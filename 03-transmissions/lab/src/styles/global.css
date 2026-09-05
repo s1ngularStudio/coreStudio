@@ -1,0 +1,84 @@
+/* Tokens from the S1NGULAR Studio Visual Spec (Claude Design canvas) --
+   keep this file in sync with that spec, don't invent new tokens here. */
+:root {
+  --paper: #fdfcfa;
+  --ink: #16151c;
+  --ink-soft: #6b6875;
+  --accent: #e7a93f;
+  --hair: rgba(22, 21, 28, 0.12);
+
+  --font-display: "Bebas Neue", Arial, sans-serif;
+  --font-heading: "Space Grotesk", ui-sans-serif, sans-serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover {
+  color: #b87a12;
+}
+
+.label {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+/* Layout system -- breakpoints match the Framer spec (Desktop 1440, Tablet 1439-834,
+   Phone 833) and the standard 12/8/4-column convention. .container caps and centers the
+   page as a whole on very wide screens, but everything inside it stays left-aligned --
+   no per-block auto-centering. .grid-12 is the shared column grid: its own column count
+   drops per breakpoint (12/8/4) so a single `grid-column: span 4` value reflows correctly
+   at every size (3-up desktop, 2-up tablet, 1-up mobile) without extra media queries. */
+:root {
+  --container-max: 1440px;
+  --container-padding: 24px;
+  --grid-gap: 24px;
+}
+
+.container {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding-left: var(--container-padding);
+  padding-right: var(--container-padding);
+}
+
+.grid-12 {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--grid-gap);
+}
+
+@media (max-width: 1439px) {
+  :root {
+    --container-padding: 32px;
+    --grid-gap: 20px;
+  }
+  .grid-12 {
+    grid-template-columns: repeat(8, 1fr);
+  }
+}
+
+@media (max-width: 833px) {
+  :root {
+    --container-padding: 20px;
+    --grid-gap: 16px;
+  }
+  .grid-12 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}

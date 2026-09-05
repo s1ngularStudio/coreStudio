@@ -1,0 +1,7 @@
+# This project lives inside a larger monorepo -- "base" is what makes a Netlify site
+# pointed at the repo root work correctly without any manual dashboard configuration.
+[build]
+  base = "03-transmissions/lab"
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"

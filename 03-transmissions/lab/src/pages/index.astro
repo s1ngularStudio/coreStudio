@@ -1,0 +1,50 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import ProjectCard from "../components/ProjectCard.astro";
+
+// Only pieces with real media show here -- a piece without one yet (like a fresh write-up
+// still waiting on a screenshot) would otherwise render as an empty gray box.
+const latestProjects = (await getCollection("pieces"))
+  .filter((piece) => piece.data.media)
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+---
+
+<BaseLayout title="(. )° Studio">
+  <div style="margin-bottom: 48px;">
+    <div style="aspect-ratio: 16 / 9; width: 100%; background: var(--ink);">
+      <iframe
+        id="twitch-embed"
+        src=""
+        height="100%"
+        width="100%"
+        style="border: none; display: block;"
+        allowfullscreen
+      ></iframe>
+    </div>
+  </div>
+
+  <div>
+    <div class="label" style="font-size: 12px; color: var(--ink-soft); margin-bottom: 16px;">
+      Latest Projects
+    </div>
+    <div class="grid-12">
+      {
+        latestProjects.map((piece) => (
+          <ProjectCard
+            href={`/work/${piece.id}`}
+            image={piece.data.media}
+            title={piece.data.title}
+            description={piece.data.summary}
+            tags={piece.data.tags}
+          />
+        ))
+      }
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  const iframe = document.getElementById("twitch-embed") as HTMLIFrameElement;
+  iframe.src = `https://player.twitch.tv/?channel=s1ngular_studio&parent=${window.location.hostname}`;
+</script>

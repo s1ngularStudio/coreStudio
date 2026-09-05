@@ -1,0 +1,106 @@
+---
+import { getCollection, render } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+export async function getStaticPaths() {
+  const pieces = (await getCollection("pieces")).sort(
+    (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
+  );
+
+  return pieces.map((piece, index) => ({
+    params: { id: piece.id },
+    props: { piece, next: pieces[(index + 1) % pieces.length] },
+  }));
+}
+
+const { piece, next } = Astro.props;
+const { Content } = await render(piece);
+
+const VIDEO_EXTENSIONS = [".mp4", ".webm", ".mov"];
+const isVideoFile = (path: string) => VIDEO_EXTENSIONS.some((ext) => path.toLowerCase().endsWith(ext));
+const isVideo = piece.data.media ? isVideoFile(piece.data.media) : false;
+---
+
+<BaseLayout title={`(. )° Studio — ${piece.data.title}`}>
+  <a href="/work" class="label" style="font-size: 10px; color: var(--ink-soft);">&larr; Work</a>
+
+  <h1 style="font-family: var(--font-display); font-size: 48px; letter-spacing: 0.02em; margin: 20px 0 12px;">
+    {piece.data.title}
+  </h1>
+
+  <div style="display: flex; gap: 10px; margin-bottom: 24px;">
+    {
+      piece.data.tags.map((tag) => (
+        <span class="label" style="font-size: 10px; color: var(--accent);">
+          {tag}
+        </span>
+      ))
+    }
+  </div>
+
+  {
+    piece.data.media && (
+      <div style="max-width: 720px; margin-bottom: 32px; background: var(--ink);">
+        {isVideo ? (
+          <video src={piece.data.media} autoplay loop muted playsinline style="width: 100%; display: block;" />
+        ) : (
+          <img src={piece.data.media} alt={piece.data.title} style="width: 100%; display: block;" />
+        )}
+      </div>
+    )
+  }
+
+  {
+    piece.data.link && (
+      <p style="margin-bottom: 24px;">
+        <a href={piece.data.link} class="label" style="font-size: 11px;">
+          View it &rarr;
+        </a>
+      </p>
+    )
+  }
+
+  <div style="font-family: var(--font-body); font-size: 17px; line-height: 1.7; max-width: 640px;">
+    <Content />
+  </div>
+
+  {
+    piece.data.gallery && piece.data.gallery.length > 0 && (
+      <div class="grid-12" style="margin-top: 32px;">
+        {
+          piece.data.gallery.map((item) => (
+            <div style="grid-column: span 6; background: var(--ink);">
+              {isVideoFile(item) ? (
+                <video src={item} autoplay loop muted playsinline style="width: 100%; display: block;" />
+              ) : (
+                <img src={item} alt="" style="width: 100%; display: block;" />
+              )}
+            </div>
+          ))
+        }
+      </div>
+    )
+  }
+
+  {
+    piece.data.builtWith && piece.data.builtWith.length > 0 && (
+      <div style="margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--hair);">
+        <div class="label" style="font-size: 10px; color: var(--ink-soft); margin-bottom: 6px;">
+          Built with
+        </div>
+        <div style="font-family: var(--font-body); font-size: 14px; color: var(--ink-soft);">
+          {piece.data.builtWith.join(" · ")}
+        </div>
+      </div>
+    )
+  }
+
+  <div style="margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--hair);">
+    <div class="label" style="font-size: 10px; color: var(--ink-soft); margin-bottom: 6px;">Next</div>
+    <a href={`/work/${next.id}`} style="color: var(--ink); text-decoration: none;">
+      <span style="font-family: var(--font-heading); text-transform: uppercase; letter-spacing: 2px; font-size: 20px;">
+        {next.data.title}
+      </span>
+    </a>
+  </div>
+</BaseLayout>

@@ -1,0 +1,151 @@
+---
+import "../styles/global.css";
+import SocialIcon from "../components/SocialIcon.astro";
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+
+const navItems = [
+  { label: "Work", href: "/work" },
+  { label: "About", href: "/about" },
+  { label: "Contact", href: "/contact" },
+  { label: "Lab", href: "/lab" },
+  { label: "Search", href: "/search" },
+];
+
+// LinkedIn has no icon here on purpose -- see contact.astro's comment for why (removed
+// from simple-icons after a trademark request from LinkedIn).
+const socialLinks = [
+  { label: "LinkedIn", href: "https://www.linkedin.com/in/rodrigoromariz/", icon: null },
+  { label: "Facebook", href: "https://www.facebook.com/S1NGULAR.studio/", icon: "facebook" },
+  { label: "Instagram", href: "https://www.instagram.com/s1ngular_studio/", icon: "instagram" },
+  { label: "Ko-fi", href: "https://ko-fi.com/s1ngular_studio", icon: "kofi" },
+] as const;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@500;700&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    />
+    <link rel="icon" href="/favicon.svg" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="site-header container">
+      <a href="/" class="label" style="font-size: 11px; color: var(--ink-soft); text-decoration: none;">(. )&deg; Studio</a>
+      <nav class="site-nav">
+        {
+          navItems.map((item) => (
+            <a class="label" href={item.href} style="font-size: 11px; color: var(--ink);">
+              {item.label}
+            </a>
+          ))
+        }
+      </nav>
+    </header>
+    <main class="container" style="padding-top: 24px; padding-bottom: 80px;">
+      <slot />
+    </main>
+    <footer style="background: var(--ink); color: var(--paper);">
+      <div class="container" style="padding-top: 48px; padding-bottom: 32px;">
+        <div class="footer-row" style="border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 32px;">
+          <div class="label" style="font-size: 13px;">New Business Inquiries</div>
+          <div class="footer-row-right">
+            <p style="font-family: var(--font-body); font-size: 15px; margin: 0 0 6px;">
+              Please, shoot me a message.
+            </p>
+            <a href="/contact" class="label" style="font-size: 12px; color: var(--paper);">Get in touch &rarr;</a>
+          </div>
+        </div>
+
+        <div class="footer-row" style="border-bottom: 1px solid rgba(255,255,255,0.12); padding: 32px 0;">
+          <div class="label" style="font-size: 13px;">About</div>
+          <div class="footer-row-right" style="max-width: 420px;">
+            <p style="font-family: var(--font-body); font-size: 15px; line-height: 1.6; margin: 0 0 16px; color: rgba(255,255,255,0.75);">
+              (. )&deg; Studio &mdash; most things digital.
+            </p>
+            <div class="footer-social-row">
+              {
+                socialLinks.map((link) => (
+                  <a
+                    href={link.href}
+                    class="footer-social-link"
+                    style="color: rgba(255,255,255,0.6); display: inline-flex; align-items: center;"
+                    target="_blank"
+                    rel="noopener"
+                    aria-label={link.label}
+                  >
+                    {link.icon ? <SocialIcon name={link.icon} size={16} /> : (
+                      <span class="label" style="font-size: 11px;">{link.label}</span>
+                    )}
+                  </a>
+                ))
+              }
+            </div>
+          </div>
+        </div>
+
+        <div style="padding-top: 20px;">
+          <span class="label" style="font-size: 10px; color: rgba(255,255,255,0.5);">
+            &copy; {new Date().getFullYear()} (. )&deg; Studio
+          </span>
+        </div>
+      </div>
+    </footer>
+
+    <style>
+      .site-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+        padding-top: 32px;
+      }
+      .site-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px 28px;
+      }
+
+      .footer-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 40px;
+      }
+      .footer-row-right {
+        text-align: right;
+      }
+      .footer-social-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: 18px;
+      }
+      @media (max-width: 833px) {
+        .footer-row {
+          flex-direction: column;
+          gap: 16px;
+        }
+        .footer-row-right {
+          text-align: left;
+          max-width: none !important;
+        }
+        .footer-social-row {
+          justify-content: flex-start;
+        }
+      }
+
+      .footer-social-link:hover {
+        color: var(--accent) !important;
+      }
+    </style>
+  </body>
+</html>

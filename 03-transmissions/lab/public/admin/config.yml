@@ -1,0 +1,29 @@
+backend:
+  name: github
+  repo: s1ngularStudio/coreStudio
+  branch: main
+  base_url: https://YOUR-DEPLOYED-SITE.netlify.app
+  auth_endpoint: .netlify/functions/auth
+
+# This CMS manages one project (the Lab) inside a larger monorepo, so every path below is
+# rooted at 03-transmissions/lab/, not the repo root.
+media_folder: "03-transmissions/lab/public/work/{{slug}}"
+public_folder: "/work/{{slug}}"
+
+collections:
+  - name: pieces
+    label: Work
+    folder: "03-transmissions/lab/src/content/pieces"
+    create: true
+    slug: "{{slug}}"
+    extension: md
+    fields:
+      - { label: Title, name: title, widget: string }
+      - { label: Date, name: date, widget: datetime, format: "YYYY-MM-DD", date_format: "YYYY-MM-DD", time_format: false }
+      - { label: Tags, name: tags, widget: list }
+      - { label: "Built With", name: builtWith, widget: list, required: false }
+      - { label: Summary, name: summary, widget: text, hint: "One or two sentences, shown wherever this piece is listed." }
+      - { label: "External Link", name: link, widget: string, required: false, hint: "Optional -- shown as a 'View it' link on the detail page." }
+      - { label: "Thumbnail / Hero Media", name: media, widget: file, required: false, hint: "Image or video. Used as the thumbnail everywhere this piece is listed, and as the hero on its own page." }
+      - { label: Gallery, name: gallery, widget: list, required: false, field: { label: Item, name: item, widget: file }, hint: "Extra images/videos, shown only on this piece's own detail page." }
+      - { label: "Write-up", name: body, widget: markdown, hint: "The full write-up for this piece's detail page. No length limit." }
