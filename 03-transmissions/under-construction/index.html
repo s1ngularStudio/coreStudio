@@ -255,7 +255,9 @@
     // one pattern repeated.
     // ---------------------------------------------------------------------
     const PIECE_COLORS = { p: "#8fbf3f", n: "#8a5fd6", b: "#e0623f", r: "#d6473f", q: "#d63fa0", k: "#3fd6d6" };
-    const GRID_SIZE = 4;
+    // 3x3 -- fewer boards means most of them can stay continuously live
+    // rather than rotating through a small connection pool (see below).
+    const GRID_SIZE = 3;
     const DOT_SPACING = 10;
     const DOT_SPEED = 14; // px/sec
     const DOT_RADIUS = 1.6;
@@ -326,56 +328,135 @@
     requestAnimationFrame(draw);
 
     // ---------------------------------------------------------------------
-    // Live data: 16 genuinely distinct simultaneous games, one per Lichess
-    // TV channel (bullet, blitz, rapid, classical, chess960, atomic, ...) --
-    // the real ceiling of Lichess's public API for "many different live
-    // games at once" (verified directly: /api/tv/channels returns exactly
-    // 16 entries; there's no public "N random ongoing games" endpoint).
+    // Live data: 9 genuinely distinct simultaneous games, one per Lichess TV
+    // channel (bullet, blitz, rapid, classical, chess960, atomic, ...) --
+    // Lichess's public API always returns 16 channels (verified directly:
+    // /api/tv/channels), we only take the first 9 to fill the 3x3 grid.
     // Each game gets its own independent stream connection and only ever
     // updates its own grid cell -- verified schema directly against the
     // real endpoint: flat {"fen": "...", "lm": "...", ...} lines, no
     // wrapper, one per move after an initial metadata-only line.
     // ---------------------------------------------------------------------
-    async function watchGame(index, gameId) {
+    // TEMP DEBUG: per-cell connection state, so a screenshot alone tells us
+    // where a cell is stuck (never remove silently -- strip this whole block
+    // plus the #debug-status element and its render loop once the mosaic's
+    // load behaviour is confirmed fixed).
+    const DEBUG = true;
+    const pageLoadTime = performance.now();
+    const cellStatus = new Array(GRID_SIZE * GRID_SIZE).fill("idle");
+    const cellErrors = new Array(GRID_SIZE * GRID_SIZE).fill(null);
+    let channelsStatus = "pending";
+    const debugEl = document.createElement("div");
+    if (DEBUG) {
+      debugEl.id = "debug-status";
+      debugEl.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:3;font:11px/1.4 monospace;color:#0f0;background:rgba(0,0,0,0.6);padding:6px 8px;border-radius:4px;white-space:pre;max-width:90vw;overflow:auto;";
+      document.body.appendChild(debugEl);
+      setInterval(() => {
+        const elapsed = ((performance.now() - pageLoadTime) / 1000).toFixed(1);
+        const counts = {};
+        cellStatus.forEach((s) => { counts[s] = (counts[s] || 0) + 1; });
+        const summary = Object.entries(counts).map(([k, v]) => `${k}:${v}`).join("  ");
+        const errCounts = {};
+        cellErrors.forEach((e) => { if (e) errCounts[e] = (errCounts[e] || 0) + 1; });
+        const errLines = Object.entries(errCounts).map(([msg, n]) => `x${n}  ${msg}`).join("\n");
+        debugEl.textContent = `t+${elapsed}s  channels:${channelsStatus}  ${summary}` + (errLines ? "\n" + errLines : "");
+      }, 500);
+    }
+
+    // Chrome caps how many requests it keeps in flight to one host at once.
+    // Holding all boards' streams open forever exhausts that cap permanently
+    // (confirmed directly at 16 boards: the page's own periodic channel
+    // refresh got stuck behind its own 16 never-closing connections). At 9
+    // boards most of them now fit under that cap and stay continuously
+    // live -- only the overflow (9 minus the pool size) ever has to wait a
+    // turn, and no cell goes blank while it does (it keeps its last known
+    // position).
+    // Left below the true concurrency ceiling on purpose -- the periodic
+    // channels re-fetch below needs a free slot of its own, or it competes
+    // with the pool and fails outright (confirmed: it did, at 6/6).
+    const MAX_CONCURRENT_STREAMS = 5;
+    const ROTATE_AFTER_MS = 15000;
+
+    let activeGameIds = new Array(GRID_SIZE * GRID_SIZE).fill(null);
+    let rotationCursor = 0;
+    const activeControllers = new Map(); // index -> AbortController
+
+    async function watchGame(index, gameId, controller) {
+      cellStatus[index] = "connecting";
+      const rotateTimer = setTimeout(() => controller.abort(), ROTATE_AFTER_MS);
       try {
-        const response = await fetch(`https://lichess.org/api/stream/game/${gameId}`);
+        const response = await fetch(`https://lichess.org/api/stream/game/${gameId}`, { signal: controller.signal });
+        cellStatus[index] = "open";
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        let gotFirstLine = false;
         while (true) {
           const { value, done } = await reader.read();
-          if (done) break;
+          if (done) { cellStatus[index] = "closed"; break; }
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop();
           for (const line of lines) {
             if (!line.trim()) continue;
+            if (!gotFirstLine) { gotFirstLine = true; cellStatus[index] = "active"; }
             const event = JSON.parse(line);
-            if (event.fen) {
-              const board = parseFEN(event.fen);
+            // The first line of a stream carries metadata + initialFen, not fen
+            // (fen only appears from the first move onward) -- without this, a
+            // cell renders blank until someone actually moves in that game.
+            const fen = event.fen || event.initialFen;
+            if (fen) {
+              const board = parseFEN(fen);
               games[index] = { board, beams: computeBeams(board) };
             }
           }
         }
       } catch (err) {
-        console.error(`Game stream ${index} (${gameId}) error`, err);
+        if (err.name === "AbortError") {
+          cellStatus[index] = "rotated"; // gave up its slot on purpose -- not a failure
+        } else {
+          cellStatus[index] = "error";
+          cellErrors[index] = `${err.name}: ${err.message}`;
+          console.error(`Game stream ${index} (${gameId}) error`, err);
+        }
+      } finally {
+        clearTimeout(rotateTimer);
+        activeControllers.delete(index);
+        fillSlots(); // let the next queued cell take this freed-up slot
       }
     }
 
-    let activeGameIds = new Array(GRID_SIZE * GRID_SIZE).fill(null);
+    function fillSlots() {
+      const total = GRID_SIZE * GRID_SIZE;
+      let attempts = 0;
+      while (activeControllers.size < MAX_CONCURRENT_STREAMS && attempts < total) {
+        const index = rotationCursor % total;
+        rotationCursor++;
+        attempts++;
+        const gameId = activeGameIds[index];
+        if (gameId && !activeControllers.has(index)) {
+          const controller = new AbortController();
+          activeControllers.set(index, controller);
+          watchGame(index, gameId, controller);
+        }
+      }
+    }
 
     async function refreshChannels() {
+      channelsStatus = "fetching";
       try {
         const response = await fetch("https://lichess.org/api/tv/channels");
+        channelsStatus = `ok(${response.status})`;
         const channels = await response.json();
-        Object.values(channels).forEach(({ gameId }, index) => {
-          if (gameId && gameId !== activeGameIds[index]) {
-            activeGameIds[index] = gameId;
-            watchGame(index, gameId); // fire and forget -- runs until that game ends
-          }
+        // Lichess always returns 16 channels; only the first GRID_SIZE^2 fill cells.
+        Object.values(channels).slice(0, GRID_SIZE * GRID_SIZE).forEach(({ gameId }, index) => {
+          if (gameId) activeGameIds[index] = gameId;
         });
+        fillSlots();
       } catch (err) {
-        console.error("Couldn't fetch Lichess TV channels, retrying in 10s", err);
+        channelsStatus = `ERROR ${err.name}: ${err.message}`;
+        console.error("Couldn't fetch Lichess TV channels, retrying in 5s", err);
+        setTimeout(refreshChannels, 5000); // transient (e.g. no free slot yet) -- don't wait a full minute
       }
     }
 
