@@ -106,7 +106,7 @@
 
   <div class="content">
     <div class="eyebrow">(. )&deg; Studio</div>
-    <h1>Something's Coming</h1>
+    <h1 id="headline">Something's Coming</h1>
     <p>Most things digital &ndash; Check back soon.</p>
   </div>
 
@@ -138,6 +138,94 @@
       localStorage.setItem("theme-override", isDark ? "dark" : "light");
       applyTheme(isDark);
     });
+
+    // ---------------------------------------------------------------------
+    // Headline: reuses the per-letter scramble-and-settle mechanic from
+    // 02-digital/explorations/currents_animation/ (a Processing sketch built
+    // on the same theory -- see 00-substrate/self-substrate-currents.md,
+    // worked example under 4.5, added 2026-09-05). Dark mode lets each cycle
+    // resolve into a real phrase (Surface, 4.5952); light mode never
+    // resolves -- letters drift through related-but-meaningless symbols
+    // indefinitely (Substance, 4.5951/4.5957). To add a new phrase (e.g. one
+    // that comes up mid-stream), just append a string to HEADLINE_PHRASES --
+    // everything else (symbol sets, timing) is generic and doesn't change.
+    // ---------------------------------------------------------------------
+    const HEADLINE_PHRASES = [
+      "Something's Coming",
+      "anything to anyone, any—.—way",
+    ];
+
+    // One small set of related-but-meaningless forms per letter (mixed
+    // math/set-theory operators, look-alike letters from other alphabets,
+    // numerals) -- same spirit as CURRENTS' own table (C -> ◯ ⊂ ⌒ ⊃ 0, etc).
+    // Punctuation/spaces/digits pass through untouched, same as the original.
+    const HEADLINE_SYMBOLS = {
+      A: ['Δ','∀','∧','⋀','4'], B: ['ß','Þ','ẞ','8','฿'], C: ['Ç','¢','⊂','⌒','0'],
+      D: ['Ð','∂','◗','þ','0'], E: ['Σ','∃','∈','€','3'], F: ['ƒ','Ⅎ','⊦','₣'],
+      G: ['Ǝ','Ɣ','Ⓖ','6','9'], H: ['Ħ','Ⱨ','ǁ','#'], I: ['Ι','ǃ','1','!','|'],
+      J: ['Ɉ','ǰ','7'], K: ['Ж','Ⱪ','Ķ','ϗ'], L: ['Ł','ℓ','⌊','1'],
+      M: ['Μ','♏','ᴟ','₥'], N: ['Ñ','И','η','∩','4'], O: ['◯','Ø','0','Θ','Ω'],
+      P: ['Ρ','Þ','℗','⌐'], Q: ['Ω','ℚ','Ɋ','9'], R: ['®','Я','℟','℞','2'],
+      S: ['$','§','∫','ſ','5'], T: ['†','⊤','⊥','⊢','7'], U: ['∪','⋃','∩','⋂','6'],
+      V: ['√','✓','⋁','Λ'], W: ['Ш','Ѡ','ω','ψ'], X: ['×','✕','Ж','⤬'],
+      Y: ['Ψ','Ұ','¥','γ'], Z: ['Ζ','ζ','⋝','2'],
+    };
+
+    const HEADLINE_DWELL_MS = 4500;            // readable hold time in dark mode before cycling
+    const HEADLINE_SETTLE_DELAY = [300, 1400]; // per-letter random delay before it locks onto the real letter
+    const HEADLINE_FLICKER_MS = [120, 320];    // per-letter symbol-swap interval while unsettled
+
+    const headlineEl = document.getElementById("headline");
+
+    class HeadlineLetter {
+      constructor(char) {
+        this.char = char;
+        this.symbols = HEADLINE_SYMBOLS[char.toUpperCase()] || null;
+        this.el = document.createElement("span");
+        this.el.textContent = char;
+        this.settled = !this.symbols; // spaces/punctuation never animate
+        this.settleAt = performance.now() + HEADLINE_SETTLE_DELAY[0] + Math.random() * (HEADLINE_SETTLE_DELAY[1] - HEADLINE_SETTLE_DELAY[0]);
+        this.nextFlicker = 0;
+      }
+      tick(now, settleAllowed) {
+        if (!this.symbols) return;
+        if (settleAllowed && now >= this.settleAt) {
+          if (!this.settled) { this.settled = true; this.el.textContent = this.char; }
+          return;
+        }
+        this.settled = false;
+        if (now >= this.nextFlicker) {
+          this.el.textContent = this.symbols[Math.floor(Math.random() * this.symbols.length)];
+          this.nextFlicker = now + HEADLINE_FLICKER_MS[0] + Math.random() * (HEADLINE_FLICKER_MS[1] - HEADLINE_FLICKER_MS[0]);
+        }
+      }
+    }
+
+    let headlineLetters = [];
+    let headlinePhraseIndex = 0;
+    let headlineNextCycle = performance.now() + HEADLINE_DWELL_MS;
+
+    function buildHeadline(phrase) {
+      headlineEl.textContent = "";
+      headlineLetters = Array.from(phrase, (ch) => new HeadlineLetter(ch));
+      headlineLetters.forEach((letter) => headlineEl.appendChild(letter.el));
+    }
+    buildHeadline(HEADLINE_PHRASES[headlinePhraseIndex]);
+
+    function headlineLoop() {
+      const now = performance.now();
+      const settleAllowed = root.getAttribute("data-theme") === "dark";
+
+      if (settleAllowed && now >= headlineNextCycle) {
+        headlinePhraseIndex = (headlinePhraseIndex + 1) % HEADLINE_PHRASES.length;
+        buildHeadline(HEADLINE_PHRASES[headlinePhraseIndex]);
+        headlineNextCycle = now + HEADLINE_DWELL_MS + HEADLINE_SETTLE_DELAY[1];
+      }
+
+      headlineLetters.forEach((letter) => letter.tick(now, settleAllowed));
+      requestAnimationFrame(headlineLoop);
+    }
+    requestAnimationFrame(headlineLoop);
 
     // ---------------------------------------------------------------------
     // Chess geometry -- a plain-JS port of core/influence_vectors.py from
@@ -337,20 +425,20 @@
     // real endpoint: flat {"fen": "...", "lm": "...", ...} lines, no
     // wrapper, one per move after an initial metadata-only line.
     // ---------------------------------------------------------------------
-    // TEMP DEBUG: per-cell connection state, so a screenshot alone tells us
-    // where a cell is stuck (never remove silently -- strip this whole block
-    // plus the #debug-status element and its render loop once the mosaic's
-    // load behaviour is confirmed fixed).
-    const DEBUG = true;
+    // Status readout: per-cell connection state, kept intentionally (not a
+    // debugging leftover) -- Rodrigo likes it as part of the page, and it's
+    // unobtrusive/unreadable as anything but ambient texture to a visitor
+    // who isn't looking for it.
+    const SHOW_STATUS_READOUT = true;
     const pageLoadTime = performance.now();
     const cellStatus = new Array(GRID_SIZE * GRID_SIZE).fill("idle");
     const cellErrors = new Array(GRID_SIZE * GRID_SIZE).fill(null);
     let channelsStatus = "pending";
-    const debugEl = document.createElement("div");
-    if (DEBUG) {
-      debugEl.id = "debug-status";
-      debugEl.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:3;font:11px/1.4 monospace;color:#0f0;background:rgba(0,0,0,0.6);padding:6px 8px;border-radius:4px;white-space:pre;max-width:90vw;overflow:auto;";
-      document.body.appendChild(debugEl);
+    const statusEl = document.createElement("div");
+    if (SHOW_STATUS_READOUT) {
+      statusEl.id = "status-readout";
+      statusEl.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:3;font:11px/1.4 monospace;color:#0f0;background:rgba(0,0,0,0.6);padding:6px 8px;border-radius:4px;white-space:pre;max-width:90vw;overflow:auto;";
+      document.body.appendChild(statusEl);
       setInterval(() => {
         const elapsed = ((performance.now() - pageLoadTime) / 1000).toFixed(1);
         const counts = {};
@@ -359,7 +447,7 @@
         const errCounts = {};
         cellErrors.forEach((e) => { if (e) errCounts[e] = (errCounts[e] || 0) + 1; });
         const errLines = Object.entries(errCounts).map(([msg, n]) => `x${n}  ${msg}`).join("\n");
-        debugEl.textContent = `t+${elapsed}s  channels:${channelsStatus}  ${summary}` + (errLines ? "\n" + errLines : "");
+        statusEl.textContent = `t+${elapsed}s  channels:${channelsStatus}  ${summary}` + (errLines ? "\n" + errLines : "");
       }, 500);
     }
 
