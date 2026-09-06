@@ -68,6 +68,35 @@
       letter-spacing: 0.02em;
       margin: 0 0 16px;
     }
+    h1 .struck {
+      text-decoration: line-through;
+      text-decoration-thickness: 0.16em;
+      text-decoration-color: currentColor;
+    }
+    h1 .raised {
+      font-size: 0.5em;
+      vertical-align: super;
+    }
+    h1 .headline-icon {
+      display: inline-block;
+      width: 0.82em;
+      height: 0.82em;
+      vertical-align: -0.06em;
+      color: inherit;
+    }
+    /* Light mode detaches the icon from the text flow entirely -- it floats
+       freely over the content card instead of blinking in a reserved slot. */
+    h1 .headline-icon.floating {
+      position: absolute;
+      opacity: 0;
+      transition: opacity 400ms ease;
+      z-index: 2;
+    }
+    h1 .headline-icon svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
     p {
       font-size: 13px;
       color: var(--ink-soft);
@@ -160,7 +189,12 @@
     // ---------------------------------------------------------------------
     const HEADLINE_PHRASES = [
       "Most things digital",
-      "anything to anyone, any—.—way",
+      "anything to anyone, any—•—way",
+      "We {eye-off} the substrate: we're immersed",
+      "The moment before meaning",
+      "We {heart} Ψ before ( )°",
+      "SUB–^OB^–jective realities",
+      "[ i / { [ \\~ ] } / o ]",
     ];
 
     // One small set of related-but-meaningless forms per letter (mixed
@@ -221,11 +255,13 @@
     }
 
     class HeadlineLetter {
-      constructor(char) {
+      constructor(char, struck, raised) {
         this.char = char;
         this.symbols = HEADLINE_SYMBOLS[char.toUpperCase()] || null;
         this.el = document.createElement("span");
         this.el.textContent = char;
+        if (struck) this.el.classList.add("struck");
+        if (raised) this.el.classList.add("raised");
         this.settled = true;
         this.nextFlicker = 0;
       }
@@ -233,11 +269,92 @@
         if (!this.symbols) return; // spaces/punctuation never animate
         if (!this.settled) { this.settled = true; this.el.textContent = this.char; }
       }
-      showFlicker(now) {
+      showFlicker(now, useAllLetters) {
         if (!this.symbols) return;
         this.settled = false;
         if (now >= this.nextFlicker) {
-          this.el.textContent = this.symbols[Math.floor(Math.random() * this.symbols.length)];
+          // Light mode's pool is this letter's own abstract symbols PLUS every
+          // real letter used across all dark-mode phrases -- the dark-mode
+          // material is included in the mix, not the whole of it.
+          const pool = useAllLetters ? this.lightPool || (this.lightPool = [...this.symbols, ...HEADLINE_ALL_LETTERS]) : this.symbols;
+          this.el.textContent = pool[Math.floor(Math.random() * pool.length)];
+          this.nextFlicker = now + HEADLINE_FLICKER_MS[0] + Math.random() * (HEADLINE_FLICKER_MS[1] - HEADLINE_FLICKER_MS[0]);
+        }
+      }
+    }
+
+    // Inline icons: write {icon-key} in a phrase and it's replaced with this
+    // SVG, sized/colored to sit inline with the text.
+    const HEADLINE_ICONS = {
+      "eye-off": `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 32C4 32 16 14 32 14C48 14 60 32 60 32C60 32 48 50 32 50C16 50 4 32 4 32Z" stroke="currentColor" stroke-width="6" stroke-linejoin="round"/>
+        <circle cx="32" cy="32" r="9" fill="currentColor"/>
+        <line x1="9" y1="55" x2="55" y2="9" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+      </svg>`,
+      "heart": `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 58C32 58 6 40 6 20C6 10 14 4 22 4C27 4 30 7 32 11C34 7 37 4 42 4C50 4 58 10 58 20C58 40 32 58 32 58Z" fill="currentColor"/>
+      </svg>`,
+    };
+
+    // Icons flicker through this shared pool of bare geometric primitives
+    // before settling -- same device as the letters' symbol sets, and the
+    // same one 4.552 already describes (a triangle or circle carrying several
+    // possible meanings at once, before one is picked).
+    const HEADLINE_ICON_VARIANTS = [
+      `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="32" cy="32" r="21" stroke="currentColor" stroke-width="6"/></svg>`,
+      `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="17" y="17" width="30" height="30" stroke="currentColor" stroke-width="6" transform="rotate(45 32 32)"/></svg>`,
+      `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><polygon points="32,9 57,53 7,53" stroke="currentColor" stroke-width="6" stroke-linejoin="round"/></svg>`,
+      `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13 13L51 51M51 13L13 51" stroke="currentColor" stroke-width="6" stroke-linecap="round"/></svg>`,
+    ];
+
+    class HeadlineIcon {
+      constructor(key) {
+        this.key = key;
+        this.el = document.createElement("span");
+        this.el.className = `headline-icon icon-${key}`;
+        this.el.innerHTML = HEADLINE_ICON_VARIANTS[Math.floor(Math.random() * HEADLINE_ICON_VARIANTS.length)];
+        this.settled = false;
+        this.nextFlicker = 0;
+        this.floating = false;
+        this.floatVisible = false;
+        this.nextFloatChange = 0;
+      }
+      setFloating(on) {
+        if (this.floating === on) return;
+        this.floating = on;
+        this.el.classList.toggle("floating", on);
+        if (!on) { this.el.style.top = ""; this.el.style.left = ""; this.el.style.opacity = ""; }
+      }
+      showSettled() {
+        this.setFloating(false); // dark mode always uses its normal inline slot
+        if (!this.settled) { this.settled = true; this.el.innerHTML = HEADLINE_ICONS[this.key] || ""; }
+      }
+      showFlicker(now, useAllLetters) {
+        this.settled = false;
+        if (!useAllLetters) {
+          this.setFloating(false); // still dark mode (mid-scramble) -- stay inline
+          if (now >= this.nextFlicker) {
+            this.el.innerHTML = HEADLINE_ICON_VARIANTS[Math.floor(Math.random() * HEADLINE_ICON_VARIANTS.length)];
+            this.nextFlicker = now + HEADLINE_FLICKER_MS[0] + Math.random() * (HEADLINE_FLICKER_MS[1] - HEADLINE_FLICKER_MS[0]);
+          }
+          return;
+        }
+        // Light mode: detached from the text flow, appears at a random point
+        // over the content card, dwells, fades out, then reappears elsewhere --
+        // not a fixed slot that just blinks.
+        this.setFloating(true);
+        if (now >= this.nextFloatChange) {
+          this.floatVisible = !this.floatVisible;
+          this.nextFloatChange = now + 600 + Math.random() * 1800;
+          if (this.floatVisible) {
+            this.el.style.top = `${10 + Math.random() * 70}%`;
+            this.el.style.left = `${8 + Math.random() * 78}%`;
+          }
+        }
+        this.el.style.opacity = this.floatVisible ? "1" : "0";
+        if (now >= this.nextFlicker) {
+          const pool = this.lightPool || (this.lightPool = [...HEADLINE_ICON_VARIANTS, ...Object.values(HEADLINE_ICONS)]);
+          this.el.innerHTML = pool[Math.floor(Math.random() * pool.length)];
           this.nextFlicker = now + HEADLINE_FLICKER_MS[0] + Math.random() * (HEADLINE_FLICKER_MS[1] - HEADLINE_FLICKER_MS[0]);
         }
       }
@@ -246,12 +363,91 @@
     let headlineLetters = [];
     let headlinePhraseIndex = 0;
 
+    // Markup: wrap text in ~tildes~ to render it struck through, or in
+    // ^carets^ to render it small and raised (superscript), e.g.
+    // "SUB--^OB^--jective". Both are stable styles (applied regardless of
+    // scramble state), so they still read correctly even mid-flicker, not
+    // only once settled. The markers themselves are stripped, never shown.
+    // To show a literal ~ or ^ (not as markup), escape it: \~ or \^.
+    function parsePhrase(raw) {
+      const chars = [];
+      const struckFlags = [];
+      const raisedFlags = [];
+      let struck = false;
+      let raised = false;
+      const src = Array.from(raw);
+      for (let i = 0; i < src.length; i++) {
+        const ch = src[i];
+        if (ch === "\\" && (src[i + 1] === "~" || src[i + 1] === "^")) {
+          chars.push(src[i + 1]);
+          struckFlags.push(struck);
+          raisedFlags.push(raised);
+          i++;
+          continue;
+        }
+        if (ch === "~") { struck = !struck; continue; }
+        if (ch === "^") { raised = !raised; continue; }
+        chars.push(ch);
+        struckFlags.push(struck);
+        raisedFlags.push(raised);
+      }
+      return { chars, struckFlags, raisedFlags };
+    }
+
+    // Every real letter (not markup, not icon tokens) used across ALL
+    // HEADLINE_PHRASES -- this is light mode's flicker pool (see
+    // HeadlineLetter.showFlicker), so drifting text there can surface
+    // fragments of any sentence, not just the one currently loaded.
+    const HEADLINE_ALL_LETTERS = (() => {
+      const set = new Set();
+      for (const phrase of HEADLINE_PHRASES) {
+        for (const segment of phrase.split(/(\{[\w-]+\})/g)) {
+          if (/^\{[\w-]+\}$/.test(segment)) continue; // skip icon tokens
+          for (const ch of parsePhrase(segment).chars) {
+            if (HEADLINE_SYMBOLS[ch.toUpperCase()]) set.add(ch);
+          }
+        }
+      }
+      return Array.from(set);
+    })();
+
     function buildHeadline(phrase) {
       headlineEl.textContent = "";
-      headlineLetters = Array.from(phrase, (ch) => new HeadlineLetter(ch));
-      headlineLetters.forEach((letter) => headlineEl.appendChild(letter.el));
+      headlineLetters = [];
+      // Split out {icon-key} tokens first; everything between/around them
+      // still goes through the normal ~struck~ text parsing.
+      const segments = phrase.split(/(\{[\w-]+\})/g);
+      for (const segment of segments) {
+        const iconMatch = segment.match(/^\{([\w-]+)\}$/);
+        if (iconMatch) {
+          headlineLetters.push(new HeadlineIcon(iconMatch[1]));
+        } else if (segment) {
+          const { chars, struckFlags, raisedFlags } = parsePhrase(segment);
+          chars.forEach((ch, i) => headlineLetters.push(new HeadlineLetter(ch, struckFlags[i], raisedFlags[i])));
+        }
+      }
+      headlineLetters.forEach((item) => headlineEl.appendChild(item.el));
     }
     buildHeadline(HEADLINE_PHRASES[headlinePhraseIndex]);
+
+    // Light mode frames the whole shifting mix with these two fixed anchors --
+    // "(" always first, ")°" always last, regardless of which phrase's letters
+    // are currently cycling in between. Created once, inserted/removed as
+    // theme changes; never touched otherwise (they don't flicker).
+    const lightAnchorOpen = document.createElement("span");
+    lightAnchorOpen.textContent = "(";
+    const lightAnchorClose = document.createElement("span");
+    lightAnchorClose.textContent = ")°";
+
+    // When the loaded phrase has no icon of its own, this one appears inline
+    // among the letters instead (real text-flow space, not a floating
+    // overlay) -- so icons are reachable in light mode regardless of phrase,
+    // without duplicating a phrase's own icon when it already has one.
+    const lightInlineIcon = document.createElement("span");
+    lightInlineIcon.className = "headline-icon";
+    let inlineIconVisible = false;
+    let inlineIconNextChange = 0;
+    let inlineIconNextFlicker = 0;
 
     // A single wavefront position sweeps left to right across the phrase in
     // both directions of the cycle: "unsettling" turns settled text back into
@@ -272,11 +468,41 @@
       const dark = root.getAttribute("data-theme") === "dark";
 
       if (!dark) {
-        // Light mode: ambient drift only, no phase machine, never settles.
-        headlineLetters.forEach((letter) => letter.showFlicker(now));
+        // Light mode: ambient drift only, no phase machine, never settles --
+        // and draws from every phrase's letters at once (see HEADLINE_ALL_LETTERS).
+        if (headlineEl.firstChild !== lightAnchorOpen) headlineEl.insertBefore(lightAnchorOpen, headlineEl.firstChild);
+        if (headlineEl.lastChild !== lightAnchorClose) headlineEl.appendChild(lightAnchorClose);
+
+        const hasOwnIcon = headlineLetters.some((item) => item instanceof HeadlineIcon);
+        if (hasOwnIcon) {
+          if (lightInlineIcon.parentNode) lightInlineIcon.parentNode.removeChild(lightInlineIcon);
+          inlineIconVisible = false;
+        } else {
+          if (now >= inlineIconNextChange) {
+            inlineIconVisible = !inlineIconVisible;
+            inlineIconNextChange = now + 600 + Math.random() * 1800;
+            if (lightInlineIcon.parentNode) lightInlineIcon.parentNode.removeChild(lightInlineIcon);
+            if (inlineIconVisible) {
+              const slots = Array.from(headlineEl.childNodes).filter((n) => n !== lightAnchorOpen && n !== lightAnchorClose);
+              const idx = Math.floor(Math.random() * (slots.length + 1));
+              headlineEl.insertBefore(lightInlineIcon, slots[idx] || lightAnchorClose);
+            }
+          }
+          if (inlineIconVisible && now >= inlineIconNextFlicker) {
+            const pool = [...HEADLINE_ICON_VARIANTS, ...Object.values(HEADLINE_ICONS)];
+            lightInlineIcon.innerHTML = pool[Math.floor(Math.random() * pool.length)];
+            inlineIconNextFlicker = now + HEADLINE_FLICKER_MS[0] + Math.random() * (HEADLINE_FLICKER_MS[1] - HEADLINE_FLICKER_MS[0]);
+          }
+        }
+
+        headlineLetters.forEach((letter) => letter.showFlicker(now, true));
         requestAnimationFrame(headlineLoop);
         return;
       }
+      if (lightAnchorOpen.parentNode) lightAnchorOpen.parentNode.removeChild(lightAnchorOpen);
+      if (lightAnchorClose.parentNode) lightAnchorClose.parentNode.removeChild(lightAnchorClose);
+      if (lightInlineIcon.parentNode) lightInlineIcon.parentNode.removeChild(lightInlineIcon);
+      inlineIconVisible = false;
 
       if (headlinePhase === "settled") {
         headlineLetters.forEach((letter) => letter.showSettled());
