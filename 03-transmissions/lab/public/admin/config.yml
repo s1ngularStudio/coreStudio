@@ -2,7 +2,7 @@ backend:
   name: github
   repo: s1ngularStudio/coreStudio
   branch: main
-  base_url: https://YOUR-DEPLOYED-SITE.netlify.app
+  base_url: https://gregarious-bonbon-4fb29e.netlify.app
   auth_endpoint: .netlify/functions/auth
 
 # This CMS manages one project (the Lab) inside a larger monorepo, so every path below is
