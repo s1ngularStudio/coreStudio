@@ -15,7 +15,7 @@
 const CLIENT_ID = process.env.OAUTH_CLIENT_ID;
 const CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET;
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   const redirectUri = `https://${event.headers.host}/.netlify/functions/auth`;
   const code = event.queryStringParameters && event.queryStringParameters.code;
 
