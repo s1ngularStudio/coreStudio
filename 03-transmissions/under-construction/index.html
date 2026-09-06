@@ -165,18 +165,23 @@
 
     // One small set of related-but-meaningless forms per letter (mixed
     // math/set-theory operators, look-alike letters from other alphabets,
-    // numerals) -- same spirit as CURRENTS' own table (C -> ◯ ⊂ ⌒ ⊃ 0, etc).
+    // numerals) -- same spirit as CURRENTS' own table (C -> ◯ ⊂ ⌒ ⊃ 0, etc), but
+    // restricted to glyphs measured (via canvas.measureText, 2026-09-05) to
+    // render at Bebas Neue's own native width. Many math/other-script look-alikes
+    // (⌒, Ж, ♏, ⊤...) aren't in Bebas Neue's glyph set and silently fall back to
+    // a much wider system font -- harmless once settled, but it made the
+    // scrambled state overflow and wrap where the real text never would.
     // Punctuation/spaces/digits pass through untouched, same as the original.
     const HEADLINE_SYMBOLS = {
-      A: ['Δ','∀','∧','⋀','4'], B: ['ß','Þ','ẞ','8','฿'], C: ['Ç','¢','⊂','⌒','0'],
-      D: ['Ð','∂','◗','þ','0'], E: ['Σ','∃','∈','€','3'], F: ['ƒ','Ⅎ','⊦','₣'],
-      G: ['Ǝ','Ɣ','Ⓖ','6','9'], H: ['Ħ','Ⱨ','ǁ','#'], I: ['Ι','ǃ','1','!','|'],
-      J: ['Ɉ','ǰ','7'], K: ['Ж','Ⱪ','Ķ','ϗ'], L: ['Ł','ℓ','⌊','1'],
-      M: ['Μ','♏','ᴟ','₥'], N: ['Ñ','И','η','∩','4'], O: ['◯','Ø','0','Θ','Ω'],
-      P: ['Ρ','Þ','℗','⌐'], Q: ['Ω','ℚ','Ɋ','9'], R: ['®','Я','℟','℞','2'],
-      S: ['$','§','∫','ſ','5'], T: ['†','⊤','⊥','⊢','7'], U: ['∪','⋃','∩','⋂','6'],
-      V: ['√','✓','⋁','Λ'], W: ['Ш','Ѡ','ω','ψ'], X: ['×','✕','Ж','⤬'],
-      Y: ['Ψ','Ұ','¥','γ'], Z: ['Ζ','ζ','⋝','2'],
+      A: ['4','K','R','X'], B: ['ß','Þ','ẞ','8'], C: ['Ç','¢','0','G'],
+      D: ['Ð','þ','0','O'], E: ['€','3','F','B'], F: ['ƒ','⊦','7','E'],
+      G: ['6','9','C','O'], H: ['Ħ','ǁ','#','N'], I: ['Ι','ǃ','1','!','L'],
+      J: ['ǰ','7','L','1'], K: ['Ķ','X','4','R'], L: ['Ł','ℓ','1','I'],
+      M: ['N','W','8','3'], N: ['Ñ','4','M','H'], O: ['Ø','0','Q','D'],
+      P: ['Þ','9','R','F'], Q: ['9','O','G','0'], R: ['2','P','K','N'],
+      S: ['$','§','∫','ſ','5'], T: ['†','7','L','F'], U: ['6','V','O','N'],
+      V: ['Y','U','7','X'], W: ['M','V','3','N'], X: ['×','K','4','Y'],
+      Y: ['¥','V','X','7'], Z: ['2','S','7','N'],
     };
 
     const HEADLINE_DWELL_MS = 4500;         // readable hold time in dark mode before the next wave
@@ -185,6 +190,35 @@
     const HEADLINE_FLICKER_MS = [120, 320]; // per-letter symbol-swap interval while unsettled
 
     const headlineEl = document.getElementById("headline");
+    const contentEl = document.querySelector(".content");
+
+    // Phrases vary a lot in length ("Most things digital" vs "anything to
+    // anyone, any-.-way"), so swapping between them resizes the whole card
+    // instantly -- a visible jump. This animates that resize: measure the
+    // card's box before the swap, pin it to that size, apply the swap, then
+    // ease from the old box to the new one (the standard FLIP technique).
+    function animateContentResize(mutate) {
+      const before = contentEl.getBoundingClientRect();
+      mutate();
+      const after = contentEl.getBoundingClientRect();
+      contentEl.style.transition = "none";
+      contentEl.style.width = before.width + "px";
+      contentEl.style.height = before.height + "px";
+      contentEl.style.overflow = "hidden";
+      contentEl.getBoundingClientRect(); // force reflow so the pinned size actually applies first
+      requestAnimationFrame(() => {
+        contentEl.style.transition = "width 400ms ease, height 400ms ease";
+        contentEl.style.width = after.width + "px";
+        contentEl.style.height = after.height + "px";
+        contentEl.addEventListener("transitionend", function cleanup() {
+          contentEl.style.transition = "";
+          contentEl.style.width = "";
+          contentEl.style.height = "";
+          contentEl.style.overflow = "";
+          contentEl.removeEventListener("transitionend", cleanup);
+        });
+      });
+    }
 
     class HeadlineLetter {
       constructor(char) {
@@ -252,7 +286,7 @@
         headlineLetters.forEach((letter, i) => (i <= wave ? letter.showFlicker(now) : letter.showSettled()));
         if (wave >= headlineLetters.length) {
           headlinePhraseIndex = (headlinePhraseIndex + 1) % HEADLINE_PHRASES.length;
-          buildHeadline(HEADLINE_PHRASES[headlinePhraseIndex]);
+          animateContentResize(() => buildHeadline(HEADLINE_PHRASES[headlinePhraseIndex]));
           headlinePhase = "settling";
           headlinePhaseStart = now;
         }
