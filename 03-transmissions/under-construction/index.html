@@ -75,6 +75,14 @@
       line-height: 1.6;
       margin: 0 auto;
     }
+    p a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+    p a:hover {
+      border-bottom-color: var(--accent);
+    }
     .theme-toggle {
       position: fixed;
       top: 20px;
@@ -106,8 +114,8 @@
 
   <div class="content">
     <div class="eyebrow">(. )&deg; Studio</div>
-    <h1 id="headline">Something's Coming</h1>
-    <p>Most things digital &ndash; Check back soon.</p>
+    <h1 id="headline">Most things digital</h1>
+    <p>Reach out if you want to chat: <a href="mailto:rrf@s1ngular.com.br">rrf@s1ngular.com.br</a></p>
   </div>
 
   <script>
@@ -151,7 +159,7 @@
     // everything else (symbol sets, timing) is generic and doesn't change.
     // ---------------------------------------------------------------------
     const HEADLINE_PHRASES = [
-      "Something's Coming",
+      "Most things digital",
       "anything to anyone, any—.—way",
     ];
 
@@ -171,9 +179,10 @@
       Y: ['Ψ','Ұ','¥','γ'], Z: ['Ζ','ζ','⋝','2'],
     };
 
-    const HEADLINE_DWELL_MS = 4500;            // readable hold time in dark mode before cycling
-    const HEADLINE_SETTLE_DELAY = [300, 1400]; // per-letter random delay before it locks onto the real letter
-    const HEADLINE_FLICKER_MS = [120, 320];    // per-letter symbol-swap interval while unsettled
+    const HEADLINE_DWELL_MS = 4500;         // readable hold time in dark mode before the next wave
+    const HEADLINE_WAVE_BASE_MS = 200;      // lead-in before the wavefront reaches character 0
+    const HEADLINE_WAVE_STAGGER_MS = 70;    // time for the wavefront to move one character to the right
+    const HEADLINE_FLICKER_MS = [120, 320]; // per-letter symbol-swap interval while unsettled
 
     const headlineEl = document.getElementById("headline");
 
@@ -183,16 +192,15 @@
         this.symbols = HEADLINE_SYMBOLS[char.toUpperCase()] || null;
         this.el = document.createElement("span");
         this.el.textContent = char;
-        this.settled = !this.symbols; // spaces/punctuation never animate
-        this.settleAt = performance.now() + HEADLINE_SETTLE_DELAY[0] + Math.random() * (HEADLINE_SETTLE_DELAY[1] - HEADLINE_SETTLE_DELAY[0]);
+        this.settled = true;
         this.nextFlicker = 0;
       }
-      tick(now, settleAllowed) {
+      showSettled() {
+        if (!this.symbols) return; // spaces/punctuation never animate
+        if (!this.settled) { this.settled = true; this.el.textContent = this.char; }
+      }
+      showFlicker(now) {
         if (!this.symbols) return;
-        if (settleAllowed && now >= this.settleAt) {
-          if (!this.settled) { this.settled = true; this.el.textContent = this.char; }
-          return;
-        }
         this.settled = false;
         if (now >= this.nextFlicker) {
           this.el.textContent = this.symbols[Math.floor(Math.random() * this.symbols.length)];
@@ -203,7 +211,6 @@
 
     let headlineLetters = [];
     let headlinePhraseIndex = 0;
-    let headlineNextCycle = performance.now() + HEADLINE_DWELL_MS;
 
     function buildHeadline(phrase) {
       headlineEl.textContent = "";
@@ -212,17 +219,52 @@
     }
     buildHeadline(HEADLINE_PHRASES[headlinePhraseIndex]);
 
+    // A single wavefront position sweeps left to right across the phrase in
+    // both directions of the cycle: "unsettling" turns settled text back into
+    // symbols (a letter crossed by the wave starts flickering), then once the
+    // wave clears the whole phrase we swap in the next phrase and immediately
+    // run the same sweep as "settling" (a letter crossed by the wave locks
+    // into its real character). One wave, there and back, always left to right.
+    let headlinePhase = "settling"; // 'settled' (dwelling) | 'unsettling' | 'settling'
+    let headlinePhaseStart = performance.now();
+    let headlineDwellUntil = 0;
+
+    function wavefrontIndex(now) {
+      return (now - headlinePhaseStart - HEADLINE_WAVE_BASE_MS) / HEADLINE_WAVE_STAGGER_MS;
+    }
+
     function headlineLoop() {
       const now = performance.now();
-      const settleAllowed = root.getAttribute("data-theme") === "dark";
+      const dark = root.getAttribute("data-theme") === "dark";
 
-      if (settleAllowed && now >= headlineNextCycle) {
-        headlinePhraseIndex = (headlinePhraseIndex + 1) % HEADLINE_PHRASES.length;
-        buildHeadline(HEADLINE_PHRASES[headlinePhraseIndex]);
-        headlineNextCycle = now + HEADLINE_DWELL_MS + HEADLINE_SETTLE_DELAY[1];
+      if (!dark) {
+        // Light mode: ambient drift only, no phase machine, never settles.
+        headlineLetters.forEach((letter) => letter.showFlicker(now));
+        requestAnimationFrame(headlineLoop);
+        return;
       }
 
-      headlineLetters.forEach((letter) => letter.tick(now, settleAllowed));
+      if (headlinePhase === "settled") {
+        headlineLetters.forEach((letter) => letter.showSettled());
+        if (now >= headlineDwellUntil) { headlinePhase = "unsettling"; headlinePhaseStart = now; }
+      } else if (headlinePhase === "unsettling") {
+        const wave = wavefrontIndex(now);
+        headlineLetters.forEach((letter, i) => (i <= wave ? letter.showFlicker(now) : letter.showSettled()));
+        if (wave >= headlineLetters.length) {
+          headlinePhraseIndex = (headlinePhraseIndex + 1) % HEADLINE_PHRASES.length;
+          buildHeadline(HEADLINE_PHRASES[headlinePhraseIndex]);
+          headlinePhase = "settling";
+          headlinePhaseStart = now;
+        }
+      } else if (headlinePhase === "settling") {
+        const wave = wavefrontIndex(now);
+        headlineLetters.forEach((letter, i) => (i <= wave ? letter.showSettled() : letter.showFlicker(now)));
+        if (wave >= headlineLetters.length) {
+          headlinePhase = "settled";
+          headlineDwellUntil = now + HEADLINE_DWELL_MS;
+        }
+      }
+
       requestAnimationFrame(headlineLoop);
     }
     requestAnimationFrame(headlineLoop);
