@@ -97,6 +97,20 @@
       height: 100%;
       display: block;
     }
+    /* The inline ambient icon (phrases with no icon of their own) is a
+       placeholder, not a settled meaning yet -- a hollow, dashed "selection"
+       sketch of icon-ness in general, crawling like a marquee/lasso tool,
+       rather than a specific, solid, colored icon. */
+    h1 .headline-icon.lasso svg * {
+      fill: var(--paper) !important;
+      stroke: var(--ink) !important;
+      stroke-width: 4;
+      stroke-dasharray: 5 4;
+      animation: headline-lasso-march 700ms linear infinite;
+    }
+    @keyframes headline-lasso-march {
+      to { stroke-dashoffset: -18; }
+    }
     p {
       font-size: 13px;
       color: var(--ink-soft);
@@ -189,12 +203,12 @@
     // ---------------------------------------------------------------------
     const HEADLINE_PHRASES = [
       "Most things digital",
-      "anything to anyone, any—•—way",
       "We {eye-off} the substrate: we're immersed",
-      "The moment before meaning",
-      "We {heart} Ψ before ( )°",
       "SUB–^OB^–jective realities",
       "[ i / { [ \\~ ] } / o ]",
+      "{heart} the Ψ before ( )°",
+      "The moment before meaning",
+      "anything to anyone, any—•—way",
     ];
 
     // One small set of related-but-meaningless forms per letter (mixed
@@ -231,7 +245,25 @@
     // instantly -- a visible jump. This animates that resize: measure the
     // card's box before the swap, pin it to that size, apply the swap, then
     // ease from the old box to the new one (the standard FLIP technique).
+    let contentResizeCleanupTimer = null;
+
     function animateContentResize(mutate) {
+      // Self-heal first: if a previous cycle's cleanup never ran (e.g. this
+      // fires again before the last transition finished -- transitionend
+      // doesn't fire when a transition gets interrupted by a new one), the
+      // box would still be pinned to a stale fixed size with overflow
+      // hidden, clipping anything taller that comes later. Always reset
+      // before measuring "before", so that measurement reflects the box's
+      // true natural size, not a leftover pin.
+      if (contentResizeCleanupTimer) {
+        clearTimeout(contentResizeCleanupTimer);
+        contentResizeCleanupTimer = null;
+      }
+      contentEl.style.transition = "";
+      contentEl.style.width = "";
+      contentEl.style.height = "";
+      contentEl.style.overflow = "";
+
       const before = contentEl.getBoundingClientRect();
       mutate();
       const after = contentEl.getBoundingClientRect();
@@ -244,13 +276,16 @@
         contentEl.style.transition = "width 400ms ease, height 400ms ease";
         contentEl.style.width = after.width + "px";
         contentEl.style.height = after.height + "px";
-        contentEl.addEventListener("transitionend", function cleanup() {
+        // A guaranteed cleanup on a timer, not transitionend -- always fires
+        // on schedule regardless of whether the transition actually
+        // completed cleanly.
+        contentResizeCleanupTimer = setTimeout(() => {
           contentEl.style.transition = "";
           contentEl.style.width = "";
           contentEl.style.height = "";
           contentEl.style.overflow = "";
-          contentEl.removeEventListener("transitionend", cleanup);
-        });
+          contentResizeCleanupTimer = null;
+        }, 450);
       });
     }
 
@@ -295,6 +330,15 @@
         <path d="M32 58C32 58 6 40 6 20C6 10 14 4 22 4C27 4 30 7 32 11C34 7 37 4 42 4C50 4 58 10 58 20C58 40 32 58 32 58Z" fill="currentColor"/>
       </svg>`,
     };
+
+    // Real color, not the monochrome currentColor of everything else -- used
+    // only when a phrase's OWN icon appears floating in light mode (a flash
+    // of settled, specific meaning inside the ambient drift), reusing the
+    // chess-mosaic's own piece palette for visual consistency across the page.
+    const HEADLINE_ICON_COLORS = { "eye-off": "#3fd6d6", "heart": "#d63fa0" };
+    const HEADLINE_ICONS_COLORED = Object.fromEntries(
+      Object.entries(HEADLINE_ICONS).map(([key, svg]) => [key, svg.replace(/currentColor/g, HEADLINE_ICON_COLORS[key] || "currentColor")])
+    );
 
     // Icons flicker through this shared pool of bare geometric primitives
     // before settling -- same device as the letters' symbol sets, and the
@@ -353,7 +397,10 @@
         }
         this.el.style.opacity = this.floatVisible ? "1" : "0";
         if (now >= this.nextFlicker) {
-          const pool = this.lightPool || (this.lightPool = [...HEADLINE_ICON_VARIANTS, ...Object.values(HEADLINE_ICONS)]);
+          // Real color for the real icons here (this phrase's own, already
+          // "settled" meaning), plain currentColor for the abstract shapes --
+          // a brief flash of color inside the otherwise monochrome drift.
+          const pool = this.lightPool || (this.lightPool = [...HEADLINE_ICON_VARIANTS, ...Object.values(HEADLINE_ICONS_COLORED)]);
           this.el.innerHTML = pool[Math.floor(Math.random() * pool.length)];
           this.nextFlicker = now + HEADLINE_FLICKER_MS[0] + Math.random() * (HEADLINE_FLICKER_MS[1] - HEADLINE_FLICKER_MS[0]);
         }
@@ -442,9 +489,11 @@
     // When the loaded phrase has no icon of its own, this one appears inline
     // among the letters instead (real text-flow space, not a floating
     // overlay) -- so icons are reachable in light mode regardless of phrase,
-    // without duplicating a phrase's own icon when it already has one.
+    // without duplicating a phrase's own icon when it already has one. It's
+    // not a specific settled icon, just the idea of one -- hence "lasso"
+    // (hollow, dashed, unfilled), never colored like a phrase's real icon.
     const lightInlineIcon = document.createElement("span");
-    lightInlineIcon.className = "headline-icon";
+    lightInlineIcon.className = "headline-icon lasso";
     let inlineIconVisible = false;
     let inlineIconNextChange = 0;
     let inlineIconNextFlicker = 0;
